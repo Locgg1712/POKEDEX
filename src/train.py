@@ -27,4 +27,4 @@ def train_model(model, train_loader, val_loader, epochs=10):
 
         print(f"Epoch {epoch+1}, Loss: {running_loss:.4f}")
 
-    torch.save(model.state_dict(), "pokemon_model.pth")
+    torch.save(model.state_dict(), "model.pth")
