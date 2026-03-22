@@ -1,29 +1,39 @@
+# src/dataset.py
+
 import os
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
-from src.dsp import preprocess_image
+import numpy as np
+import cv2
+from src.preprocess import extract_pokemon
+from src.features import extract_features
 
-def load_dataset(data_dir, batch_size=32):
+def augment(img):
+    return [img, cv2.flip(img, 1)]
 
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
+def load_dataset(data_dir):
+    X, y = [], []
+    labels = {}
+    label_id = 0
 
-        transforms.Lambda(preprocess_image),  # 👈 DSP ở đây
+    for class_name in os.listdir(data_dir):
+        class_path = os.path.join(data_dir, class_name)
 
-        transforms.ToTensor()
-    ])
+        if not os.path.isdir(class_path):
+            continue
 
-    train_data = datasets.ImageFolder(
-        root=os.path.join(data_dir, "train"),
-        transform=transform
-    )
+        labels[label_id] = class_name
 
-    val_data = datasets.ImageFolder(
-        root=os.path.join(data_dir, "val"),
-        transform=transform
-    )
+        for file in os.listdir(class_path):
+            path = os.path.join(class_path, file)
 
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=batch_size)
+            img = extract_pokemon(path)
+            if img is None:
+                continue
 
-    return train_loader, val_loader, train_data.classes
+            for aug in augment(img):
+                feat = extract_features(aug)
+                X.append(feat)
+                y.append(label_id)
+
+        label_id += 1
+
+    return np.array(X), np.array(y), labels

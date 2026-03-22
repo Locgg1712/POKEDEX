@@ -1,11 +1,6 @@
-from src.dataset import load_dataset
-from src.model import PokemonCNN
-from src.train import train_model
+# src/main.py
 
-data_dir = "data_processed"
+from src.train import train
 
-train_loader, val_loader, classes = load_dataset(data_dir)
-
-model = PokemonCNN(num_classes=len(classes))
-
-train_model(model, train_loader, val_loader)
+if __name__ == "__main__":
+    train("data")

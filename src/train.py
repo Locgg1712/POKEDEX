@@ -1,83 +1,62 @@
-import torch
-import torch.optim as optim
-import torch.nn as nn
+# src/train.py
 
-def train_model(model, train_loader, val_loader, epochs=20):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+from src.dataset import load_dataset
+from src.model import create_base_model
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+import joblib
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+def train(data_dir="data"):
+    print("Loading data...")
+    X, y, labels = load_dataset(data_dir)
 
-    best_val_loss = float('inf')
-    patience = 3
-    counter = 0
+    # 🔥 SCALE TRƯỚC
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
 
-    for epoch in range(epochs):
-        # ===== TRAIN =====
-        model.train()
-        train_loss = 0
-        correct = 0
-        total = 0
+    # 🔥 GRID SEARCH
+    model = create_base_model()
 
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
+    param_grid = {
+        'C': [1, 10, 20, 50],
+        'gamma': [0.001, 0.01, 0.1],
+        'kernel': ['rbf']
+    }
 
-            optimizer.zero_grad()
-            outputs = model(images)
+    grid = GridSearchCV(model, param_grid, cv=5, verbose=2, n_jobs=-1)
 
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+    print("Training with GridSearch...")
+    grid.fit(X, y)
 
-            train_loss += loss.item()
+    best_model = grid.best_estimator_
 
-            # accuracy
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+    print("Best params:", grid.best_params_)
 
-        train_acc = 100 * correct / total
+    # đánh giá
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=42
+    )
 
-        # ===== VALIDATION =====
-        model.eval()
-        val_loss = 0
-        correct = 0
-        total = 0
+    y_pred = best_model.predict(X_val)
+    acc = accuracy_score(y_val, y_pred)
 
-        with torch.no_grad():
-            for images, labels in val_loader:
-                images, labels = images.to(device), labels.to(device)
+    print(f"🔥 Accuracy: {acc*100:.2f}%")
 
-                outputs = model(images)
-                loss = criterion(outputs, labels)
+    # confusion matrix
+    cm = confusion_matrix(y_val, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d')
+    plt.title("Confusion Matrix")
+    plt.show()
 
-                val_loss += loss.item()
+    # save
+    joblib.dump(best_model, "model.pkl")
+    joblib.dump(labels, "labels.pkl")
+    joblib.dump(scaler, "scaler.pkl")
 
-                _, predicted = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+    print("Saved model!")
 
-        val_acc = 100 * correct / total
-
-        print(f"Epoch {epoch+1}/{epochs}")
-        print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%")
-        print(f"Val Loss:   {val_loss:.4f} | Val Acc:   {val_acc:.2f}%")
-        print("-" * 40)
-
-        # ===== EARLY STOPPING =====
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            counter = 0
-
-            # lưu model tốt nhất
-            torch.save(model.state_dict(), "model.pth")
-            print("💾 Saved best model")
-        else:
-            counter += 1
-
-        if counter >= patience:
-            print("⛔ Early stopping")
-            break
-
-    print("✅ Training finished")
+if __name__ == "__main__":
+    train()

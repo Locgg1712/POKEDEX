@@ -1,31 +1,28 @@
-import torch
-from PIL import Image
-from torchvision import transforms
-from src.model import PokemonCNN
-from src.dsp import preprocess_image  # 👈 import DSP
+# src/predict.py
 
-def predict(image_path, model_path, classes):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+import joblib
+import numpy as np
+from src.preprocess import extract_pokemon
+from src.features import extract_features
 
-    # ⚙️ Transform giống y chang dataset
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.Lambda(preprocess_image),  # 👈 DSP
-        transforms.ToTensor()
-    ])
+def predict(image_path):
+    model = joblib.load("model.pkl")
+    labels = joblib.load("labels.pkl")
+    scaler = joblib.load("scaler.pkl")
 
-    # load ảnh
-    img = Image.open(image_path).convert("RGB")
-    img = transform(img).unsqueeze(0).to(device)
+    img = extract_pokemon(image_path)
+    feat = extract_features(img)
 
-    # load model
-    model = PokemonCNN(num_classes=len(classes)).to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
+    feat = scaler.transform([feat])
 
-    # predict
-    with torch.no_grad():
-        output = model(img)
-        _, predicted = torch.max(output, 1)
+    probs = model.predict_proba(feat)[0]
+    top3 = np.argsort(probs)[-3:][::-1]
 
-    return classes[predicted.item()]
+    return [(labels[i], probs[i]) for i in top3]
+
+if __name__ == "__main__":
+    path = input("Ảnh: ")
+    results = predict(path)
+
+    for name, p in results:
+        print(name, f"{p:.2f}")
