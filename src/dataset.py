@@ -1,10 +1,15 @@
 import os
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+from src.dsp import preprocess_image
 
 def load_dataset(data_dir, batch_size=32):
+
     transform = transforms.Compose([
         transforms.Resize((128, 128)),
+
+        transforms.Lambda(preprocess_image),  # 👈 DSP ở đây
+
         transforms.ToTensor()
     ])
 

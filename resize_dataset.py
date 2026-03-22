@@ -19,16 +19,10 @@ for label in os.listdir(input_path):
         if img is None:
             continue
         
-        # Resize
+        # Resize 
         img = cv2.resize(img, (128, 128))
         
-        # Grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        # Edge
-        edges = cv2.Canny(gray, 100, 200)
-        
         save_path = os.path.join(save_label_path, file)
-        cv2.imwrite(save_path, edges)
+        cv2.imwrite(save_path, img)
 
 print("✅ Done processing dataset")

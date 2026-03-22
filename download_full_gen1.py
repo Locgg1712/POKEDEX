@@ -34,13 +34,17 @@ for name in pokemon_list:
     save_dir = f"data/{name}"
     os.makedirs(save_dir, exist_ok=True)
     
-    crawler = BingImageCrawler(storage={'root_dir': save_dir})
+    crawler = BingImageCrawler(
+        downloader_threads=4,
+        storage={'root_dir': save_dir}
+    )
     
     crawler.crawl(
-        keyword=f"{name} pokemon",
-        max_num=30
+        keyword=f"{name} pokemon official artwork",  
+        max_num=50,
+        min_size=(200, 200)  # 👈 lọc ảnh nhỏ
     )
     
     time.sleep(1)
 
-print("✅ DONE 50 POKEMON")
+print("✅ DONE DATASET")

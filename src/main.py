@@ -2,7 +2,7 @@ from src.dataset import load_dataset
 from src.model import PokemonCNN
 from src.train import train_model
 
-data_dir = "data"
+data_dir = "data_processed"
 
 train_loader, val_loader, classes = load_dataset(data_dir)
 

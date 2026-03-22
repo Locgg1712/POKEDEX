@@ -2,7 +2,7 @@ import os
 import shutil
 import random
 
-source_dir = "data"
+source_dir = "data_processed"
 output_dir = "data_split"
 
 train_dir = os.path.join(output_dir, "train")
