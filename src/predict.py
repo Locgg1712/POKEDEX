@@ -2,8 +2,10 @@
 
 import joblib
 import numpy as np
+
 from src.preprocess import extract_pokemon
 from src.features import extract_features
+
 
 def predict(image_path):
     model = joblib.load("model.pkl")
@@ -15,14 +17,14 @@ def predict(image_path):
 
     feat = scaler.transform([feat])
 
-    probs = model.predict_proba(feat)[0]
-    top3 = np.argsort(probs)[-3:][::-1]
+    pred = model.predict(feat)[0]
+    prob = model.predict_proba(feat)[0]
 
-    return [(labels[i], probs[i]) for i in top3]
+    return labels[pred], max(prob)
+
 
 if __name__ == "__main__":
     path = input("Ảnh: ")
-    results = predict(path)
+    name, conf = predict(path)
 
-    for name, p in results:
-        print(name, f"{p:.2f}")
+    print(name, f"{conf:.2f}")
