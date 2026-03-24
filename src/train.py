@@ -13,11 +13,11 @@ def train(data_dir="data"):
     print("Loading data...")
     X, y, labels = load_dataset(data_dir)
 
-    # 🔥 SCALE TRƯỚC
+    #  SCALE TRƯỚC
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
-    # 🔥 GRID SEARCH
+    # GRID SEARCH
     model = create_base_model()
 
     param_grid = {
@@ -43,7 +43,7 @@ def train(data_dir="data"):
     y_pred = best_model.predict(X_val)
     acc = accuracy_score(y_val, y_pred)
 
-    print(f"🔥 Accuracy: {acc*100:.2f}%")
+    print(f" Accuracy: {acc*100:.2f}%")
 
     # confusion matrix
     cm = confusion_matrix(y_val, y_pred)

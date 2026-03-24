@@ -1,6 +1,6 @@
 import cv2
 
-# 👉 dùng cho model
+#  dùng cho model
 def extract_pokemon(image_path):
     img = cv2.imread(image_path)
 
@@ -22,7 +22,7 @@ def extract_pokemon(image_path):
     return img
 
 
-# 👉 dùng cho GUI (debug từng bước)
+#  dùng cho GUI (debug từng bước)
 def extract_pokemon_debug(image_path):
     img = cv2.imread(image_path)
 

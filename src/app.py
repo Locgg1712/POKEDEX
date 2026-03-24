@@ -29,7 +29,7 @@ def load_image():
     # ===== ORIGINAL =====
     img1 = cv2_to_tk(steps["original"])
     panel_original.config(image=img1)
-    panel_original.image = img1  # 🔥 giữ reference
+    panel_original.image = img1  #  giữ reference
 
     # ===== BLUR =====
     img2 = cv2_to_tk(steps["blur"])
