@@ -9,7 +9,7 @@ from skimage.feature import hog
 def get_fourier_descriptors(img, num_descriptors=32):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # ✅ FIX 1: lọc nhiễu trước khi tìm biên
+    #  lọc nhiễu trước khi tìm biên
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
     edges = cv2.Canny(blur, 50, 150)
@@ -22,7 +22,7 @@ def get_fourier_descriptors(img, num_descriptors=32):
     contour = max(contours, key=cv2.contourArea)
 
     # ==============================
-    # ✅ FIX 2: RESAMPLE contour (cực quan trọng)
+    #   RESAMPLE contour (cực quan trọng)
     # ==============================
     contour = contour.squeeze()
 
