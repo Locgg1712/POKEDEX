@@ -78,7 +78,7 @@ Hệ thống sử dụng kết hợp 3 loại đặc trưng:
 
 ---
 
-## 📊 Kết quả
+##  Kết quả
 
 * Độ chính xác: **~94%**
 * Nhận diện tốt các Pokémon có màu đặc trưng
