@@ -1,0 +1,19 @@
+# DATASET
+data/
+
+# MODEL
+model.pkl
+scaler.pkl
+labels.pkl
+
+# CACHE
+__pycache__/
+*.pyc
+
+# IMAGE (optional)
+*.png
+*.jpg
+
+# ENV
+venv/
+.env

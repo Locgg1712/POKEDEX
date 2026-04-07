@@ -1,74 +1,87 @@
+# src/features.py
+
 import cv2
 import numpy as np
 from skimage.feature import hog
+from src.preprocess import auto_canny, clean_edges
 
 
 # ==============================
-# FOURIER DESCRIPTORS (FIX DSP)
+# FOURIER DESCRIPTORS
 # ==============================
+
 def get_fourier_descriptors(img, num_descriptors=32):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    #  lọc nhiễu trước khi tìm biên
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    edges = cv2.Canny(blur, 50, 150)
+    edges = auto_canny(blur)
+    edges = clean_edges(edges)
 
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     if len(contours) == 0:
         return np.zeros(num_descriptors)
 
-    contour = max(contours, key=cv2.contourArea)
+    # ===== Lọc contour theo diện tích =====
+    areas = [cv2.contourArea(c) for c in contours]
+    max_area = max(areas)
 
-    # ==============================
-    #   RESAMPLE contour (cực quan trọng)
-    # ==============================
-    contour = contour.squeeze()
+    # Chỉ lấy contour đủ lớn (> 20% contour lớn nhất)
+    valid_contours = [
+        c for c, a in zip(contours, areas)
+        if a > 0.2 * max_area
+    ]
 
-    if len(contour.shape) != 2:
+    fd_all  = []
+    weights = []
+
+    for contour in valid_contours:
+        area    = cv2.contourArea(contour)   # tính area trước khi squeeze
+        contour = contour.squeeze()
+
+        if len(contour.shape) != 2 or len(contour) < 32:
+            continue
+
+        # Resample đều 128 điểm
+        idx     = np.linspace(0, len(contour) - 1, 128).astype(int)
+        contour = contour[idx]
+
+        # FFT → magnitude
+        contour_complex = contour[:, 0] + 1j * contour[:, 1]
+        fourier_result  = np.fft.fft(contour_complex)
+        fd_mag          = np.abs(fourier_result)[1:]
+
+        # Scale invariant
+        if fd_mag[0] != 0:
+            fd_mag = fd_mag / fd_mag[0]
+
+        fd = fd_mag[:num_descriptors] if len(fd_mag) >= num_descriptors \
+            else np.pad(fd_mag, (0, num_descriptors - len(fd_mag)))
+
+        fd_all.append(fd)
+        weights.append(area)
+
+    if len(fd_all) == 0:
         return np.zeros(num_descriptors)
 
-    # lấy đều 128 điểm
-    idx = np.linspace(0, len(contour) - 1, 128).astype(int)
-    contour = contour[idx]
+    # ===== Weighted average theo diện tích =====
+    fd_features = np.average(np.array(fd_all), axis=0,
+                             weights=np.array(weights, dtype=np.float64))
 
-    # chuyển sang số phức
-    contour_complex = contour[:, 0] + 1j * contour[:, 1]
-
-    # FFT
-    fourier_result = np.fft.fft(contour_complex)
-
-    # magnitude
-    fd_mag = np.abs(fourier_result)
-
-    # ==============================
-    # ✅ FIX 3: chuẩn hóa DSP
-    # ==============================
-    fd_mag = fd_mag[1:]  # bỏ DC (tịnh tiến)
-
-    if fd_mag[0] != 0:
-        fd_mag = fd_mag / fd_mag[0]  # scale invariant
-
-    # lấy tần số thấp (shape chính)
-    if len(fd_mag) >= num_descriptors:
-        fd_features = fd_mag[:num_descriptors]
-    else:
-        fd_features = np.pad(fd_mag, (0, num_descriptors - len(fd_mag)), 'constant')
+    if fd_features.max() > 0:
+        fd_features = fd_features / fd_features.max()
 
     return fd_features
 
 
 # ==============================
-# MAIN FEATURE
+# MAIN FEATURE EXTRACTION
 # ==============================
+
 def extract_features(img):
 
-    # ==============================
-    # 1. HOG (SHAPE)
-    # ==============================
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
+    # ===== 1. HOG — shape =====
+    gray     = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     hog_feat = hog(
         gray,
         orientations=9,
@@ -77,22 +90,19 @@ def extract_features(img):
         visualize=False
     )
 
-    # ==============================
-    # 2. COLOR (FIX OVERFIT)
-    # ==============================
-    # ✅ giảm từ 32 xuống 16
-    hist = cv2.calcHist([img], [0, 1, 2], None, [16, 16, 16], [0, 256]*3)
-    hist = cv2.normalize(hist, hist).flatten()
+    # ===== 2. HSV COLOR HISTOGRAM =====
+    # H: 16 bins (màu sắc quan trọng nhất)
+    # S: 8 bins, V: 8 bins
+    hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hist = cv2.calcHist(
+        [hsv], [0, 1, 2], None,
+        [16, 8, 8],
+        [0, 180, 0, 256, 0, 256]
+    )
+    hist = cv2.normalize(hist, hist, norm_type=cv2.NORM_L2).flatten()
 
-    weighted_hist = hist * 8.0
-
-    # ==============================
-    # 3. FOURIER (DSP)
-    # ==============================
+    # ===== 3. FOURIER — DSP shape descriptor =====
     fd_feat = get_fourier_descriptors(img, num_descriptors=32)
-    weighted_fd = fd_feat * 2.5
 
-    # ==============================
-    # CONCAT
-    # ==============================
-    return np.hstack([hog_feat, weighted_hist, weighted_fd])
+    # StandardScaler trong train.py cân bằng scale giữa 3 nhóm
+    return np.hstack([hog_feat, hist, fd_feat])
