@@ -5,7 +5,10 @@ import numpy as np
 
 
 def bilateral_denoise(img):
-    return cv2.bilateralFilter(img, d=9, sigmaColor=60, sigmaSpace=60)
+    # Bước 1: Khử nhiễu muối tiêu (salt & pepper / speckle) cực tốt bằng Median Blur
+    img = cv2.medianBlur(img, 3)
+    # Bước 2: Khử nhiễu Gaussian và làm mịn nhưng vẫn giữ cạnh (Tăng sigma)
+    return cv2.bilateralFilter(img, d=9, sigmaColor=75, sigmaSpace=75)
 
 
 def auto_canny(gray, sigma=0.33):

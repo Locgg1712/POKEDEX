@@ -1,12 +1,13 @@
 # src/predict.py
 
+import os
 import joblib
 import numpy as np
 from src.preprocess import extract_pokemon
 from src.features import extract_features
 
 
-# ✅ Load model 1 lần khi import — không load lại mỗi lần predict
+#  Load model 1 lần khi import — không load lại mỗi lần predict
 _model  = None
 _labels = None
 _scaler = None
@@ -15,9 +16,10 @@ _scaler = None
 def _load_model():
     global _model, _labels, _scaler
     if _model is None:
-        _model  = joblib.load("model.pkl")
-        _labels = joblib.load("labels.pkl")
-        _scaler = joblib.load("scaler.pkl")
+        model_dir = "Model"
+        _model  = joblib.load(os.path.join(model_dir, "model.pkl"))
+        _labels = joblib.load(os.path.join(model_dir, "labels.pkl"))
+        _scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
 
 
 def predict(image_path):

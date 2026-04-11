@@ -117,11 +117,15 @@ def train(data_dir="data"):
     # ==============================
     # SAVE MODEL
     # ==============================
-    joblib.dump(best_model, "model.pkl")
-    joblib.dump(labels,     "labels.pkl")
-    joblib.dump(scaler,     "scaler.pkl")
+    import os
+    model_dir = "Model"
+    os.makedirs(model_dir, exist_ok=True)
+    
+    joblib.dump(best_model, os.path.join(model_dir, "model.pkl"))
+    joblib.dump(labels,     os.path.join(model_dir, "labels.pkl"))
+    joblib.dump(scaler,     os.path.join(model_dir, "scaler.pkl"))
 
-    print("\nSaved model.pkl / labels.pkl / scaler.pkl")
+    print("\nSaved model.pkl / labels.pkl / scaler.pkl into Model/")
 
 
 if __name__ == "__main__":

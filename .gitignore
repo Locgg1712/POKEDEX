@@ -2,6 +2,7 @@
 data/
 
 # MODEL
+Model/
 model.pkl
 scaler.pkl
 labels.pkl

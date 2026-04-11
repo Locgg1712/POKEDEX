@@ -98,7 +98,7 @@ POKEDEX/
 │   ├── train.py
 │   ├── predict.py
 │   └── app.py
-│
+│── test/               # ảnh test
 ├── data/              # (không bao gồm)
 ├── model.pkl          # (không bao gồm)
 ├── README.md
