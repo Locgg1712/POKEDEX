@@ -17,3 +17,7 @@ __pycache__/
 # ENV
 venv/
 .env
+
+# TEST
+test/
+Test/

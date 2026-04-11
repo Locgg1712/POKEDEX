@@ -12,7 +12,11 @@ from src.preprocess import auto_canny, clean_edges
 
 def get_fourier_descriptors(img, num_descriptors=32):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Tăng cường khử nhiễu muối tiêu trước khi viền cạnh
+    gray = cv2.medianBlur(gray, 3)
+    # Làm mịn thêm với Gaussian
+    blur = cv2.GaussianBlur(gray, (7, 7), 0)
 
     edges = auto_canny(blur)
     edges = clean_edges(edges)
