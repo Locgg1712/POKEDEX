@@ -17,39 +17,29 @@ def train(data_dir="data"):
     print("Loading data...")
     X, y, labels = load_dataset(data_dir)
 
-    # ==============================
-    # SPLIT
-    # ==============================
+    # --- Split ---
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42
     )
 
     print(f"\nTrain: {len(X_train)} | Val: {len(X_val)}")
 
-    # ==============================
-    # SCALE (tránh leakage)
-    # ==============================
+    # --- Scale (tránh leakage) ---
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_val   = scaler.transform(X_val)
 
-    # ==============================
-    # GIẢM DATA ĐỂ TUNE NHANH
-    # ==============================
+    # --- Giảm data để tune nhanh ---
     subset_size = 2000  
     X_small = X_train[:subset_size]
     y_small = y_train[:subset_size]
 
     print(f"\nGridSearch trên {subset_size} samples...")
 
-    # ==============================
-    # MODEL
-    # ==============================
+    # --- Model ---
     model = create_base_model()
 
-    # ==============================
-    #  GRID NHẸ 
-    # ==============================
+    # --- Grid nhẹ ---
     param_grid = {
         'C': [10, 100],
         'gamma': ['scale'],
@@ -59,15 +49,13 @@ def train(data_dir="data"):
     grid = GridSearchCV(
         model,
         param_grid,
-        cv=3,              #  giảm từ 5 → 3
+        cv=3,              
         verbose=2,
         n_jobs=-1,
         scoring='accuracy'
     )
 
-    # ==============================
-    # TRAIN GRID
-    # ==============================
+    # --- Train Grid ---
     print("\nTraining với GridSearch (FAST MODE)...")
     grid.fit(X_small, y_small)
 
@@ -75,15 +63,11 @@ def train(data_dir="data"):
 
     print("\nBest params:", grid.best_params_)
 
-    # ==============================
-    #  TRAIN LẠI FULL DATA
-    # ==============================
+    # --- Train lại full data ---
     print("\nTraining lại trên full dataset...")
     best_model.fit(X_train, y_train)
 
-    # ==============================
-    # EVALUATION
-    # ==============================
+    # --- Evaluation ---
     y_pred = best_model.predict(X_val)
     acc    = accuracy_score(y_val, y_pred)
 
@@ -95,9 +79,7 @@ def train(data_dir="data"):
         target_names=[labels[i] for i in sorted(labels)]
     ))
 
-    # ==============================
-    # CONFUSION MATRIX
-    # ==============================
+    # --- Confusion Matrix ---
     cm = confusion_matrix(y_val, y_pred)
 
     plt.figure(figsize=(10, 8))
@@ -114,9 +96,7 @@ def train(data_dir="data"):
     plt.tight_layout()
     plt.show()
 
-    # ==============================
-    # SAVE MODEL
-    # ==============================
+    # --- Save Model ---
     import os
     model_dir = "Model"
     os.makedirs(model_dir, exist_ok=True)

@@ -5,9 +5,9 @@ import numpy as np
 
 
 def bilateral_denoise(img):
-    # Bước 1: Khử nhiễu muối tiêu (salt & pepper / speckle) cực tốt bằng Median Blur
+    # Bước 1: Khử nhiễu Median Blur
     img = cv2.medianBlur(img, 3)
-    # Bước 2: Khử nhiễu Gaussian và làm mịn nhưng vẫn giữ cạnh (Tăng sigma)
+    # Bước 2: Khử nhiễu Gaussian giữ cạnh
     return cv2.bilateralFilter(img, d=9, sigmaColor=75, sigmaSpace=75)
 
 
@@ -23,9 +23,7 @@ def clean_edges(edges):
     return cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
 
 
-# ==============================
-# DÙNG CHO MODEL (train + predict)
-# ==============================
+# --- Dùng cho Model (train + predict) ---
 
 def extract_pokemon(image_path):
     img = cv2.imread(image_path)
@@ -38,9 +36,7 @@ def extract_pokemon(image_path):
     return cv2.resize(img, (64, 64))
 
 
-# ==============================
-# DÙNG CHO GUI
-# ==============================
+# --- Dùng cho GUI ---
 
 def extract_pokemon_debug(image_path):
     img = cv2.imread(image_path)

@@ -3,9 +3,7 @@ import cv2
 import numpy as np
 
 
-# ==============================
-# NOISE FUNCTIONS
-# ==============================
+# --- Noise Functions ---
 
 def gaussian_noise(img, mean=0, sigma=25):
     noise = np.random.normal(mean, sigma, img.shape).astype(np.float32)
@@ -36,9 +34,7 @@ def speckle_noise(img):
     return np.clip(noisy, 0, 255).astype(np.uint8)
 
 
-# ==============================
-# MAIN
-# ==============================
+# --- Main ---
 
 img_path = "test/pikachu2.png"   # ảnh của bạn
 img = cv2.imread(img_path)

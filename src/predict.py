@@ -7,7 +7,7 @@ from src.preprocess import extract_pokemon
 from src.features import extract_features
 
 
-#  Load model 1 lần khi import — không load lại mỗi lần predict
+# Load model 1 lần khi import
 _model  = None
 _labels = None
 _scaler = None
