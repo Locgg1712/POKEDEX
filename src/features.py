@@ -82,9 +82,8 @@ def get_fourier_descriptors(img, num_descriptors=32):
 # MAIN FEATURE EXTRACTION
 # ==============================
 
-def extract_features(img):
-
-    # ===== 1. HOG — shape =====
+def extract_feature_components(img):
+    # ===== 1. HOG — shape/edge =====
     gray     = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     hog_feat = hog(
         gray,
@@ -108,5 +107,10 @@ def extract_features(img):
     # ===== 3. FOURIER — DSP shape descriptor =====
     fd_feat = get_fourier_descriptors(img, num_descriptors=32)
 
+    return hog_feat, hist, fd_feat
+
+
+def extract_features(img):
+    hog_feat, hist, fd_feat = extract_feature_components(img)
     # StandardScaler trong train.py cân bằng scale giữa 3 nhóm
-    return np.hstack([hog_feat, hist, fd_feat])
+    return np.hstack([hog_feat, hist, fd_feat])
