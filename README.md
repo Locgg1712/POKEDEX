@@ -145,7 +145,7 @@ POKEDEX/
 ## Tải data set để chạy lại model 
 ```bash
  https://www.kaggle.com/datasets/noodulz/pokemon-dataset-1000 
- ```bash
+```
 ##  Đóng góp chính
 
 * Kết hợp DSP và ML trong bài toán nhận diện ảnh
