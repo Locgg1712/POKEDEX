@@ -7,6 +7,15 @@ Dự án này xây dựng một hệ thống **nhận diện Pokémon từ ảnh
 * Xử lý tín hiệu số (Digital Signal Processing – DSP)
 *  Học máy (Machine Learning – ML)
 
+## Cài đặt dự án từ GitHub
+# Clone repository
+git clone https://github.com/Locgg1712/POKEDEX.git
+# Cài thư viện
+pip install -r requirements.txt
+
+# Chạy project
+python main.py
+
 Hệ thống nhận đầu vào là một ảnh và trả về:
 
 * Tên Pokémon
