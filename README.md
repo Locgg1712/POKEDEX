@@ -116,7 +116,7 @@ Hệ thống sử dụng kết hợp 3 loại đặc trưng:
 
 ```
 POKEDEX/
-│
+│── Danh_gia/           #file danh gia (khong bao gom ảnh)
 ├── src/
 │   ├── preprocess.py
 │   ├── features.py
@@ -126,8 +126,9 @@ POKEDEX/
 │   └── app.py
 │── test/               # ảnh test
 ├── data/              # (không bao gồm)
-├── model.pkl          # (không bao gồm)
+├── Model              # (không bao gồm)
 ├── README.md
+├── requirenments.txt
 └── .gitignore
 ```
 
@@ -138,9 +139,13 @@ POKEDEX/
 * Dataset không được đưa lên GitHub do dung lượng lớn
 * Model không được cung cấp (có thể train lại)
 * Dự án tập trung vào sự kết hợp giữa DSP và ML
-
+* Đánh giá hiện không có ảnh để chạy đánh giá
 ---
 
+## Tải data set để chạy lại model 
+```bash
+ https://www.kaggle.com/datasets/noodulz/pokemon-dataset-1000 
+ ```bash
 ##  Đóng góp chính
 
 * Kết hợp DSP và ML trong bài toán nhận diện ảnh
