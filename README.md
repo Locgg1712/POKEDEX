@@ -8,13 +8,30 @@ Dự án này xây dựng một hệ thống **nhận diện Pokémon từ ảnh
 *  Học máy (Machine Learning – ML)
 
 ## Cài đặt dự án từ GitHub
-# Clone repository
-git clone https://github.com/Locgg1712/POKEDEX.git
-# Cài thư viện
-pip install -r requirements.txt
 
-# Chạy project
+### Clone repository
+
+```bash
+git clone https://github.com/Locgg1712/POKEDEX.git
+cd POKEDEX
+```
+
+### Cài thư viện
+
+```bash
+pip install -r requirements.txt
+```
+
+### Chạy project
+
+```bash
 python main.py
+```
+### Chạy giao diện GUI
+
+```bash
+python app.py
+```
 
 Hệ thống nhận đầu vào là một ảnh và trả về:
 
