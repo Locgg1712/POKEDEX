@@ -15,7 +15,7 @@ from src.features import extract_features
 
 def augment(img):
     """
-    11 biến thể: hình học đa dạng + màu sắc + nhiễu.
+    15 biến thể: hình học đa dạng + màu sắc + nhiễu nhẹ.
     """
     results = [img]
     h, w    = img.shape[:2]
@@ -64,7 +64,36 @@ def augment(img):
     noisy = np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
     results.append(noisy)
 
-    return results  # 11 ảnh
+    # ===== Biến thể bổ sung, giữ nguyên nhận dạng và silhouette =====
+
+    # 11. Xoay nhẹ để giảm phụ thuộc vào tư thế chụp
+    M = cv2.getRotationMatrix2D(center, 10, 1.0)
+    results.append(cv2.warpAffine(
+        img, M, (w, h), borderMode=cv2.BORDER_REFLECT_101
+    ))
+
+    # 12. Xoay nhẹ theo hướng ngược lại
+    M = cv2.getRotationMatrix2D(center, -10, 1.0)
+    results.append(cv2.warpAffine(
+        img, M, (w, h), borderMode=cv2.BORDER_REFLECT_101
+    ))
+
+    # 13. Zoom nhẹ vào trung tâm, tránh tạo crop quá mạnh
+    M = cv2.getRotationMatrix2D(center, 0, 1.15)
+    results.append(cv2.warpAffine(
+        img, M, (w, h), borderMode=cv2.BORDER_REFLECT_101
+    ))
+
+    # 14. Thay đổi saturation và brightness trong HSV
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
+    hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.2, 0, 255)
+    hsv[:, :, 2] = np.clip(hsv[:, :, 2] * 1.1 + 5, 0, 255)
+    results.append(cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR))
+
+    # 15. Blur nhẹ mô phỏng ảnh chụp thiếu nét
+    results.append(cv2.GaussianBlur(img, (3, 3), 0))
+
+    return results
 
 
 # ==============================

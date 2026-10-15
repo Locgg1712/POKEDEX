@@ -33,7 +33,7 @@ def compute_centroids(data_dir="data", model_dir="Model"):
             path = os.path.join(class_path, file)
             img = extract_pokemon(path)
             if img is not None:
-                hog_feat, hist, fd_feat = extract_feature_components(img)
+                hog_feat, _, hist, fd_feat = extract_feature_components(img)
                 hogs.append(hog_feat)
                 hists.append(hist)
                 fds.append(fd_feat)
@@ -57,7 +57,7 @@ def cosine_similarity(v1, v2):
     return np.dot(v1, v2) / norm
 
 def analyze_features(img_components, predicted_class, centroids):
-    hog_feat, hist, fd_feat = img_components
+    hog_feat, _, hist, fd_feat = img_components
     
     if predicted_class not in centroids:
         return 0.0, 0.0, 0.0
