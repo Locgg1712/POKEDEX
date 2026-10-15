@@ -2,7 +2,10 @@
 
 import cv2
 import numpy as np
+import os
 
+IMAGE_SIZE = int(os.environ.get("POKEDEX_IMAGE_SIZE", "64"))
+PREPROCESS_SIZE = 128
 
 def bilateral_denoise(img):
     # Bước 1: Khử nhiễu Median Blur
@@ -30,10 +33,10 @@ def extract_pokemon(image_path):
     if img is None:
         return None
 
-    img = cv2.resize(img, (128, 128))
+    img = cv2.resize(img, (PREPROCESS_SIZE, PREPROCESS_SIZE))
     img = bilateral_denoise(img)
 
-    return cv2.resize(img, (64, 64))
+    return cv2.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
 
 
 # --- Dùng cho GUI ---
@@ -43,7 +46,7 @@ def extract_pokemon_debug(image_path):
     if img is None:
         return None
 
-    original = cv2.resize(img, (128, 128))
+    original = cv2.resize(img, (PREPROCESS_SIZE, PREPROCESS_SIZE))
     denoised = bilateral_denoise(original)
 
     gray      = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
@@ -56,5 +59,5 @@ def extract_pokemon_debug(image_path):
         "blur":     denoised,
         "edges":    edges_col,
         "combine":  denoised,
-        "final":    cv2.resize(denoised, (64, 64))
+        "final":    cv2.resize(denoised, (IMAGE_SIZE, IMAGE_SIZE))
     }

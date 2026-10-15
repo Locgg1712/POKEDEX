@@ -71,7 +71,7 @@ def analyze_features(img_components, predicted_class, centroids):
     return max(0.0, min(1.0, float(sim_color))), max(0.0, min(1.0, float(sim_shape))), max(0.0, min(1.0, float(sim_texture)))
 
 def generate_explanation(predicted_class, sim_color, sim_shape, sim_texture):
-    traits = POKEMON_TRAITS.get(predicted_class, "đặc trưng chưa xác định")
+    traits = POKEMON_TRAITS.get(predicted_class.lower(), "đặc trưng chưa xác định")
     parts = traits.split(", ")
     color_desc = parts[0] if len(parts) > 0 else "màu sắc đặc trưng"
     shape_desc = parts[1] if len(parts) > 1 else "hình dáng đặc trưng"
@@ -81,7 +81,7 @@ def generate_explanation(predicted_class, sim_color, sim_shape, sim_texture):
     t = int(sim_texture * 100)
     
     explanation = (
-        f"LÝ DO NHẬN DIỆN ({predicted_class.capitalize()}):\n\n"
+        f"LÝ DO NHẬN DIỆN ({predicted_class}):\n\n"
         f"• Màu sắc chủ đạo (giống {c}%):\n  Phù hợp với {color_desc}.\n\n"
         f"• Hình dạng tổng thể (giống {s}%):\n  Đặc trưng bởi {shape_desc}.\n\n"
         f"• Chi tiết cấu trúc cạnh (giống {t}%):\n  Các đường viền, góc cạnh (tai, mắt...) khớp với nguyên mẫu.\n"

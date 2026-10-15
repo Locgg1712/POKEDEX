@@ -3,24 +3,54 @@
 import os
 import joblib
 import numpy as np
+import torch
 from src.preprocess import extract_pokemon
-from src.features import extract_feature_components
+from src.features import extract_feature_components, extra_features, FEATURE_DIM
 from src.explain import analyze_features, generate_explanation
+from src.mlp import build_mlp
 
 # Load model 1 lần khi import
-_model  = None
+_models = None
 _labels = None
 _scaler = None
 _centroids = None
+_model_type = None
+_meta = None
 
 
 def _load_model():
-    global _model, _labels, _scaler, _centroids
-    if _model is None:
+    global _models, _labels, _scaler, _centroids, _model_type, _meta
+    if _models is None:
         model_dir = "Model"
-        _model  = joblib.load(os.path.join(model_dir, "model.pkl"))
         _labels = joblib.load(os.path.join(model_dir, "labels.pkl"))
         _scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
+        svm_path = os.path.join(model_dir, "model.pkl")
+        mlp_paths = sorted(
+            os.path.join(model_dir, name)
+            for name in os.listdir(model_dir)
+            if name.startswith("mlp_") and name.endswith(".pt")
+        )
+        mlp_path = os.path.join(model_dir, "mlp.pt")
+
+        if os.path.exists(svm_path):
+            _models = [joblib.load(svm_path)]
+            _model_type = "svm"
+        elif mlp_paths or os.path.exists(mlp_path):
+            _meta = joblib.load(os.path.join(model_dir, "meta.pkl"))
+            mlp_paths = mlp_paths or [mlp_path]
+            _models = []
+            for path in mlp_paths:
+                model = build_mlp(_meta["in_dim"], _meta["num_classes"])
+                state_dict = torch.load(path, map_location="cpu", weights_only=True)
+                model.load_state_dict(state_dict)
+                model.eval()
+                _models.append(model)
+            _model_type = "mlp"
+        else:
+            raise FileNotFoundError(
+                "Không tìm thấy Model/model.pkl, Model/mlp.pt hoặc Model/mlp_*.pt."
+            )
+
         try:
             _centroids = joblib.load(os.path.join(model_dir, "centroids.pkl"))
         except FileNotFoundError:
@@ -34,19 +64,53 @@ def predict(image_path):
     if img is None:
         return "Không đọc được ảnh", 0.0, "Không thể trích xuất đặc trưng từ ảnh."
 
-    hog_feat, hist, fd_feat = extract_feature_components(img)
-    feat = np.hstack([hog_feat, hist, fd_feat])
-    feat_scaled = _scaler.transform([feat])
+    def make_feature(image):
+        components = extract_feature_components(image)
+        hog_feat, hist, fd_feat = components
+        full = np.hstack([hog_feat, hist, fd_feat, extra_features(image)])
+        if full.shape[0] != FEATURE_DIM:
+            raise RuntimeError(f"Unexpected feature dimension: {full.shape[0]}")
+        expected_dim = int(_meta.get("in_dim", FEATURE_DIM)) if _meta else FEATURE_DIM
+        if expected_dim == 2820:
+            return full[:2820], components
+        cols = _meta.get("cols") if _meta else None
+        selected = full[np.asarray(cols, dtype=np.int64)] if cols else full
+        return selected, components
 
-    pred = _model.predict(feat_scaled)[0]
-    prob = _model.predict_proba(feat_scaled)[0]
-    
+    feat, components = make_feature(img)
+    flipped_feat, _ = make_feature(np.ascontiguousarray(np.fliplr(img)))
+    feat_scaled = _scaler.transform([feat])
+    flipped_scaled = _scaler.transform([flipped_feat])
+    if _meta and _meta.get("w") is not None:
+        weight = np.asarray(_meta["w"])
+        feat_scaled = feat_scaled * weight
+        flipped_scaled = flipped_scaled * weight
+
+    if _model_type == "svm":
+        prob = (
+            _models[0].predict_proba(feat_scaled)[0]
+            + _models[0].predict_proba(flipped_scaled)[0]
+        ) / 2
+    else:
+        with torch.no_grad():
+            tensor = torch.from_numpy(feat_scaled).float()
+            flipped_tensor = torch.from_numpy(flipped_scaled).float()
+            probabilities = [
+                (
+                    torch.softmax(model(tensor), dim=1).numpy()[0]
+                    + torch.softmax(model(flipped_tensor), dim=1).numpy()[0]
+                ) / 2
+                for model in _models
+            ]
+        prob = np.mean(probabilities, axis=0)
+    pred = int(np.argmax(prob))
+
     predicted_name = _labels[pred]
     confidence = float(max(prob))
 
     # Explanation Generation
     if _centroids:
-        c, s, t = analyze_features((hog_feat, hist, fd_feat), predicted_name, _centroids)
+        c, s, t = analyze_features(components, predicted_name, _centroids)
         explanation = generate_explanation(predicted_name, c, s, t)
     else:
         explanation = "Không tìm thấy dữ liệu centroids để giải thích."

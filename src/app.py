@@ -228,7 +228,7 @@ class PokedexApp(ctk.CTk):
         try:
             name, conf, expl = predict(path)
             
-            self.pokemon_name_label.configure(text=name.capitalize(), text_color=self.text_color)
+            self.pokemon_name_label.configure(text=name, text_color=self.text_color)
             self.confidence_bar.set(conf)
             self.confidence_label.configure(text=f"Độ tin cậy: {conf*100:.2f}%")
             

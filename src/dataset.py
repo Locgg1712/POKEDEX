@@ -3,7 +3,9 @@
 import os
 import cv2
 import numpy as np
+from typing import overload, Literal
 from src.preprocess import extract_pokemon
+from src.preprocess import IMAGE_SIZE
 from src.features import extract_features
 
 
@@ -41,11 +43,12 @@ def augment(img):
     results.append(cv2.warpAffine(img, shear, (w, h)))
 
     # 6. Translate phải-xuống
-    M = np.float32([[1, 0, 8], [0, 1, 8]])
+    shift = IMAGE_SIZE // 8
+    M = np.float32([[1, 0, shift], [0, 1, shift]])
     results.append(cv2.warpAffine(img, M, (w, h)))
 
     # 7. Translate trái-lên
-    M = np.float32([[1, 0, -8], [0, 1, -8]])
+    M = np.float32([[1, 0, -shift], [0, 1, -shift]])
     results.append(cv2.warpAffine(img, M, (w, h)))
 
     # ===== Màu sắc =====
@@ -68,8 +71,22 @@ def augment(img):
 # LOAD DATASET
 # ==============================
 
-def load_dataset(data_dir):
-    X, y     = [], []
+@overload
+def load_dataset(data_dir, return_groups: Literal[True]) -> tuple[
+    np.ndarray, np.ndarray, dict[int, str], np.ndarray
+]:
+    ...
+
+
+@overload
+def load_dataset(data_dir, return_groups: Literal[False] = False) -> tuple[
+    np.ndarray, np.ndarray, dict[int, str]
+]:
+    ...
+
+
+def load_dataset(data_dir, return_groups=False):
+    X, y, groups = [], [], []
     labels   = {}
     label_id = 0
 
@@ -89,14 +106,18 @@ def load_dataset(data_dir):
             if img is None:
                 continue
 
+            group_id = f"{class_name}/{file}"
             for aug in augment(img):
                 feat = extract_features(aug)
                 X.append(feat)
                 y.append(label_id)
+                groups.append(group_id)
                 count += 1
 
         print(f"  {class_name}: {count} ảnh (sau augment)")
         label_id += 1
 
     print(f"\nTổng: {len(X)} samples, {len(labels)} classes")
+    if return_groups:
+        return np.array(X), np.array(y), labels, np.array(groups)
     return np.array(X), np.array(y), labels
