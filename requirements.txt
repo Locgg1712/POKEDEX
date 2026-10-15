@@ -6,3 +6,5 @@ seaborn
 joblib
 pillow
 scikit-image
+torch
+customtkinter

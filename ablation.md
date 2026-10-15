@@ -15,13 +15,23 @@ Run `kaggle/notebook_a_features.py` and then
 | Resolution 128 | Separate run with 128x128 preprocessing and ppc=16 | pending | pending | pending |
 | Group weighting | `1/sqrt(group dimension)` after scaling | pending | pending | pending |
 | Ensemble | Five MLP seeds | pending | pending | pending |
-| TTA | Ensemble + horizontal flip average | pending | pending | pending |
 
+Horizontal-flip TTA is applied at local inference time by `src/predict.py`;
+it is not included as a separate offline ablation because `features.npz` does
+not retain the raw images needed to construct the flipped validation features.
 The exact measured output, hardest classes, confusion pairs, confidence
 thresholds, `confusion.png`, and `confidence.png` are written by notebook B.
 Do not claim an improvement until the corresponding row is copied from the
 Kaggle output. A change that does not improve accuracy on this fixed split
 should be removed or explicitly marked as rejected.
+
+## Evaluation note
+
+The current training loop selects the best checkpoint using validation
+accuracy and then reports that same validation fold. These numbers are useful
+for comparing ablations, but are optimistic as a final generalization
+estimate. For a final report, reserve a second grouped fold as an untouched
+test set after the ablation choice is frozen.
 
 ## Reproducibility checklist
 

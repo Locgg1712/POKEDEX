@@ -50,6 +50,9 @@ y = data["y"].astype(np.int64)
 groups = data["groups"].astype(str)
 names = data["names"].astype(str)
 assert X.shape[1] == FEATURE_DIM
+assert int(data["image_size"]) == IMAGE_SIZE, (
+    f"Feature image size {int(data['image_size'])} != notebook image size {IMAGE_SIZE}"
+)
 if "group_columns" in data:
     saved_groups = json.loads(str(data["group_columns"].item()))
 else:
@@ -71,7 +74,7 @@ def cols(*keys):
     return np.asarray(selected, dtype=np.int64)
 
 
-def train_one(X_train, y_train, X_val, y_val, seed, epochs=80):
+def train_one(X_train, y_train, X_val, y_val, seed, weight, epochs=80):
     torch.manual_seed(seed)
     model = build_mlp(X_train.shape[1], len(names)).to(DEVICE)
     train_loader = DataLoader(
@@ -86,13 +89,14 @@ def train_one(X_train, y_train, X_val, y_val, seed, epochs=80):
         optimizer, max_lr=1e-3, epochs=epochs, steps_per_epoch=len(train_loader)
     )
     criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+    noise_scale = torch.from_numpy(weight).to(DEVICE) * 0.1
     best_acc, best_state = -1.0, None
     for _ in range(epochs):
         model.train()
         for batch_x, batch_y in train_loader:
             batch_x = batch_x.to(DEVICE)
             batch_y = batch_y.to(DEVICE)
-            noisy = batch_x + torch.randn_like(batch_x) * 0.1
+            noisy = batch_x + torch.randn_like(batch_x) * noise_scale
             optimizer.zero_grad(set_to_none=True)
             loss = criterion(model(noisy), batch_y)
             loss.backward()
@@ -165,7 +169,9 @@ def run_ablation(label, selected, ensemble=False, weighted=False, save=False):
     models = []
     seeds = range(5) if ensemble else [SEED]
     for seed in seeds:
-        model, _ = train_one(train_x, y[train_idx], val_x, y[val_idx], seed)
+        model, _ = train_one(
+            train_x, y[train_idx], val_x, y[val_idx], seed, weight
+        )
         models.append(model)
     prob = probabilities(models, val_x)
     pred, report = evaluate(label, y[val_idx], prob)
@@ -233,3 +239,22 @@ plt.close()
 print("Ablation")
 for row in results:
     print(f"{row[0]:25s} accuracy={row[1]:.4f} macro_f1={row[2]:.4f}")
+
+# %%
+# Centroids are kept in the original three component spaces used by explain.py.
+import shutil
+
+sel = {
+    key: np.arange(*map(int, saved_groups[key]))
+    for key in ("hog", "hist", "fd")
+}
+cent = {}
+for i, name in enumerate(names):
+    class_features = X[y == i]
+    cent[str(name)] = {
+        key: class_features[:, columns].mean(axis=0)
+        for key, columns in sel.items()
+    }
+joblib_dump(cent, MODEL_DIR / "centroids.pkl")
+shutil.make_archive("/kaggle/working/Model", "zip", MODEL_DIR)
+print(f"Saved centroids and /kaggle/working/Model.zip")

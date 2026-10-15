@@ -23,7 +23,8 @@ Giảng viên: TS. Trần Thị Thúy Quỳnh
 
 Báo cáo trình bày một hệ thống nhận diện hình ảnh Pokémon dựa trên
 sự kết hợp giữa **Xử lý tín hiệu số (Digital Signal Processing — DSP)**
-và **Học máy (Machine Learning)**. Hệ thống thực hiện phân loại 10 loài
+và **Học máy (Machine Learning)**. Hệ thống được thiết kế để phân loại
+150 loài
 Pokémon thông qua một luồng xử lý tín hiệu chặt chẽ: khử nhiễu bằng
 bộ lọc Bilateral, trích xuất biên tự động bằng thuật toán Canny, và tổng
 hợp không gian đặc trưng đa chiều bao gồm Fourier Descriptors, HOG
@@ -906,4 +907,3 @@ of Machine Learning Research , 12, 2825–2830.
 [8] Saxena, R. R., Nieters, E., & Mamudu, I. (2025). Pokémondium: A machine
 learning approach to detecting images of Pokémon. TechRxiv.
 ```
-

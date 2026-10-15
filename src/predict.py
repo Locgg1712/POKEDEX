@@ -4,7 +4,7 @@ import os
 import joblib
 import numpy as np
 import torch
-from src.preprocess import extract_pokemon
+from src.preprocess import extract_pokemon, IMAGE_SIZE
 from src.features import extract_feature_components, extra_features, FEATURE_DIM
 from src.explain import analyze_features, generate_explanation
 from src.mlp import build_mlp
@@ -32,11 +32,17 @@ def _load_model():
         )
         mlp_path = os.path.join(model_dir, "mlp.pt")
 
-        if os.path.exists(svm_path):
-            _models = [joblib.load(svm_path)]
-            _model_type = "svm"
-        elif mlp_paths or os.path.exists(mlp_path):
+        if (mlp_paths or os.path.exists(mlp_path)) and os.path.exists(
+            os.path.join(model_dir, "meta.pkl")
+        ):
             _meta = joblib.load(os.path.join(model_dir, "meta.pkl"))
+            trained_image_size = _meta.get("image_size")
+            if trained_image_size is not None and int(trained_image_size) != IMAGE_SIZE:
+                raise RuntimeError(
+                    f"Model expects image size {trained_image_size}, "
+                    f"but preprocessing uses {IMAGE_SIZE}. "
+                    "Set POKEDEX_IMAGE_SIZE to the training value."
+                )
             mlp_paths = mlp_paths or [mlp_path]
             _models = []
             for path in mlp_paths:
@@ -46,6 +52,9 @@ def _load_model():
                 model.eval()
                 _models.append(model)
             _model_type = "mlp"
+        elif os.path.exists(svm_path):
+            _models = [joblib.load(svm_path)]
+            _model_type = "svm"
         else:
             raise FileNotFoundError(
                 "Không tìm thấy Model/model.pkl, Model/mlp.pt hoặc Model/mlp_*.pt."

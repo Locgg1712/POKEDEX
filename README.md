@@ -25,12 +25,12 @@ pip install -r requirements.txt
 ### Chạy project
 
 ```bash
-python main.py
+python -m src.main
 ```
 ### Chạy giao diện GUI
 
 ```bash
-python app.py
+python -m src.app
 ```
 
 Hệ thống nhận đầu vào là một ảnh và trả về:
