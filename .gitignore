@@ -22,3 +22,6 @@ venv/
 # TEST
 test/
 Test/
+
+# IDE
+.vscode/

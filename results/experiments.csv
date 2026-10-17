@@ -1,0 +1,13 @@
+Experiment_Label,Top1_Accuracy,Top3_Accuracy,Top5_Accuracy,Macro_F1
+E00_baseline_hog_hist_fd,53.69%,68.36%,74.30%,52.32%
+E01_plus_fine_hog,53.79%,68.99%,74.96%,52.43%
+E02_plus_spatial_color,59.56%,74.42%,79.41%,58.31%
+E03_plus_moments,60.35%,74.99%,79.97%,59.10%
+E04_plus_lbp,61.04%,75.46%,80.54%,59.74%
+E05_plus_shape_hu,60.79%,75.27%,80.43%,59.49%
+E06_plus_glcm,60.99%,76.01%,80.96%,59.74%
+E07_plus_gabor,61.14%,75.98%,81.07%,59.88%
+E08_all_dsp_features,62.50%,76.88%,81.85%,61.13%
+E09_all_dsp_deep_mlp,67.88%,82.22%,86.65%,66.80%
+E10_all_dsp_ensemble_5seeds,69.60%,83.69%,88.02%,68.54%
+E10_all_dsp_ensemble_5seeds + evolution_rerank,69.60%,83.79%,88.08%,68.54%

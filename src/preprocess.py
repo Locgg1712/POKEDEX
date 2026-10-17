@@ -11,7 +11,7 @@ def bilateral_denoise(img):
     # Bước 1: Khử nhiễu Median Blur
     img = cv2.medianBlur(img, 3)
     # Bước 2: Khử nhiễu Gaussian giữ cạnh
-    return cv2.bilateralFilter(img, d=9, sigmaColor=75, sigmaSpace=75)
+    return cv2.bilateralFilter(img, d=9, sigmaColor=50, sigmaSpace=50)
 
 
 def auto_canny(gray, sigma=0.33):

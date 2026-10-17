@@ -3,8 +3,8 @@
 import cv2
 import numpy as np
 from skimage.feature import hog, local_binary_pattern, graycomatrix, graycoprops
-from src.preprocess import auto_canny, clean_edges
-from src.preprocess import IMAGE_SIZE
+from src.preprocess import auto_canny, clean_edges, IMAGE_SIZE
+from src.evolution import extract_evolution_stage_features
 
 # ==============================================================================
 # FEATURE DIMENSIONS CONFIGURATION
@@ -30,14 +30,15 @@ GEOMETRY_DIM = 10
 HU_DIM = 7
 
 # New DSP Modules
-GLCM_DIM = 40          # 5 props * 2 distances * 4 angles
-GABOR_DIM = 36         # 3 frequencies * 6 orientations * 2 stats
-FOURIER_2D_DIM = 16    # 8 radial frequency bands + 8 directional wedges
+GLCM_DIM = 40        # 5 props * 2 distances * 4 angles
+GABOR_DIM = 36       # 3 frequencies * 6 orientations * 2 stats
+FOURIER_2D_DIM = 16  # 8 radial frequency bands + 8 directional wedges
+STAGE_MORPH_DIM = 7  # 7 đặc trưng hình thái & entropy phân biệt cấp độ phức tạp
 
 FEATURE_DIM = (
     HOG_DIM + HOG_FINE_DIM + HIST_DIM + FD_DIM + SPATIAL_HIST_DIM
     + MOMENTS_DIM + LBP_DIM + GEOMETRY_DIM + HU_DIM
-    + GLCM_DIM + GABOR_DIM + FOURIER_2D_DIM
+    + GLCM_DIM + GABOR_DIM + FOURIER_2D_DIM + STAGE_MORPH_DIM
 )
 
 _offset = 0
@@ -55,9 +56,58 @@ for _name, _size in (
     ("glcm", GLCM_DIM),
     ("gabor", GABOR_DIM),
     ("fourier_2d", FOURIER_2D_DIM),
+    ("stage_morph", STAGE_MORPH_DIM),
 ):
     FEATURE_GROUPS[_name] = (_offset, _offset + _size)
     _offset += _size
+
+# Trọng số ưu tiên ngữ nghĩa cho từng nhóm đặc trưng DSP
+GROUP_IMPORTANCE = {
+    "hog": 1.0,
+    "hog_fine": 0.7,
+    "hist": 1.15,
+    "fd": 0.9,
+    "sp_hist": 1.1,
+    "moments": 0.85,
+    "lbp": 0.85,
+    "geometry": 0.8,
+    "hu": 0.75,
+    "glcm": 0.9,
+    "gabor": 0.95,
+    "fourier_2d": 0.85,
+    "stage_morph": 0.85,
+}
+
+
+def compute_block_weights(saved_groups=None, selected_columns=None, total_dim=None):
+    """
+    Tính vector trọng số cân bằng cho từng cột đặc trưng:
+    Mỗi nhóm đặc trưng có số chiều D_g được nhân với:
+        w_g = importance_g * sqrt(mean_dim / D_g)
+    Giúp các nhóm đặc trưng DSP ít chiều (Fourier, Gabor, GLCM, Shape) không bị
+    áp đảo bởi 3,112 chiều của HOG + HSV Histogram sau khi qua StandardScaler.
+    """
+    groups = saved_groups if saved_groups is not None else FEATURE_GROUPS
+    if total_dim is None:
+        total_dim = max(end for _, end in groups.values())
+
+    w_full = np.ones(total_dim, dtype=np.float32)
+    ref_dim = 128.0  # Số chiều tham chiếu chuẩn
+
+    for name, (start, end) in groups.items():
+        start, end = int(start), int(end)
+        if end <= start or end > total_dim:
+            continue
+        dim_g = float(end - start)
+        imp = GROUP_IMPORTANCE.get(name, 1.0)
+        # Cân bằng năng lượng theo căn bậc hai tỷ lệ chiều (giới hạn hệ số khuếch đại để tránh khuếch đại nhiễu)
+        scale = imp * np.clip(np.sqrt(ref_dim / dim_g), 0.45, 2.2)
+        w_full[start:end] = scale
+
+    if selected_columns is not None:
+        cols = np.asarray(selected_columns, dtype=np.int64)
+        return w_full[cols]
+    return w_full
 
 
 # ==============================================================================
@@ -67,7 +117,7 @@ for _name, _size in (
 def get_fourier_descriptors(img, num_descriptors=32):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.medianBlur(gray, 3)
-    blur = cv2.GaussianBlur(gray, (7, 7), 0)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
     edges = auto_canny(blur)
     edges = clean_edges(edges)
@@ -127,6 +177,23 @@ def get_fourier_descriptors(img, num_descriptors=32):
 # 2. CORE FEATURE COMPONENTS (HOG, HSV, FD)
 # ==============================================================================
 
+def _foreground_mask(img):
+    """Tạo mặt nạ tách nền tự động giúp giảm nhiễu màu background cho HSV Histogram."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Kiểm tra xem nền là sáng trắng hay tối ở 4 góc ảnh
+    corners = np.array([gray[0, 0], gray[0, -1], gray[-1, 0], gray[-1, -1]], dtype=np.float32)
+    corner_mean = float(np.mean(corners))
+    if corner_mean > 240:
+        _, mask = cv2.threshold(gray, 245, 255, cv2.THRESH_BINARY_INV)
+    elif corner_mean < 15:
+        _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+    else:
+        return None
+    if np.count_nonzero(mask) < 0.1 * gray.size:
+        return None
+    return mask
+
+
 def extract_feature_components(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     hog_feat = hog(
@@ -145,8 +212,9 @@ def extract_feature_components(img):
     )
 
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    fg_mask = _foreground_mask(img)
     hist = cv2.calcHist(
-        [hsv], [0, 1, 2], None,
+        [hsv], [0, 1, 2], fg_mask,
         [16, 8, 8],
         [0, 180, 0, 256, 0, 256]
     )
@@ -183,9 +251,11 @@ def spatial_color_hist(img, grid=3, bins=(8, 4)):
 def color_moments(img):
     """Mean, standard deviation and skew for each Lab channel."""
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    fg_mask = _foreground_mask(img)
     values = []
     for channel in range(3):
-        flattened = lab[:, :, channel].reshape(-1)
+        ch_data = lab[:, :, channel]
+        flattened = ch_data[fg_mask > 0] if fg_mask is not None else ch_data.reshape(-1)
         mean_val = float(np.mean(flattened))
         std_val = float(np.std(flattened))
         skew_val = float(np.mean(((flattened - mean_val) / (std_val + 1e-8)) ** 3))
@@ -264,12 +334,8 @@ def hu_moments(img):
 # ==============================================================================
 
 def glcm_features(img, distances=(1, 3), angles=(0, np.pi/4, np.pi/2, 3*np.pi/4)):
-    """
-    GLCM texture features: contrast, dissimilarity, homogeneity, energy, correlation.
-    Cơ sở DSP: Ma trận đồng xuất mức xám thống kê bậc 2 trên tín hiệu ảnh.
-    """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray_quantized = (gray // 8).astype(np.uint8)  # 32 mức xám
+    gray_quantized = (gray // 8).astype(np.uint8)
     glcm = graycomatrix(gray_quantized, distances=list(distances), angles=list(angles),
                         levels=32, symmetric=True, normed=True)
     props = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']
@@ -280,18 +346,15 @@ def glcm_features(img, distances=(1, 3), angles=(0, np.pi/4, np.pi/2, 3*np.pi/4)
     return np.nan_to_num(feats)
 
 
-def gabor_features(img, frequencies=(0.1, 0.2, 0.4), orientations=6):
-    """
-    Gabor filter bank: phân tích tần số và hướng đa thang đo.
-    Cơ sở DSP: Tích bao Gaussian và sóng điều hòa sin.
-    """
+def gabor_features(img, frequencies=(0.12, 0.25, 0.4), orientations=6):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float64)
+    ksize = 11 if IMAGE_SIZE <= 64 else 17
     feats = []
     for freq in frequencies:
         for theta_idx in range(orientations):
             theta = theta_idx * np.pi / orientations
             kernel = cv2.getGaborKernel(
-                (21, 21), sigma=3.0, theta=theta,
+                (ksize, ksize), sigma=2.5, theta=theta,
                 lambd=1.0 / freq, gamma=0.5, psi=0
             )
             response = cv2.filter2D(gray, cv2.CV_64F, kernel)
@@ -304,10 +367,6 @@ def gabor_features(img, frequencies=(0.1, 0.2, 0.4), orientations=6):
 
 
 def fourier_2d_features(img, n_rings=8, n_wedges=8):
-    """
-    Phổ biên độ DFT 2D: Năng lượng theo dải tần số bán kính và hướng.
-    Cơ sở DSP: Biến đổi Fourier 2 chiều rời rạc trên ảnh mức xám.
-    """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float64)
     f_transform = np.fft.fft2(gray)
     f_shift = np.fft.fftshift(f_transform)
@@ -317,7 +376,6 @@ def fourier_2d_features(img, n_rings=8, n_wedges=8):
     cy, cx = h // 2, w // 2
     max_r = min(cy, cx)
 
-    # 1. Radial rings
     radial = []
     Y, X = np.ogrid[:h, :w]
     dist = np.sqrt((Y - cy) ** 2 + (X - cx) ** 2)
@@ -327,7 +385,6 @@ def fourier_2d_features(img, n_rings=8, n_wedges=8):
         mask = (dist >= r_in) & (dist < r_out)
         radial.append(float(magnitude[mask].mean()) if mask.any() else 0.0)
 
-    # 2. Angular wedges
     angular = []
     angles = np.arctan2(Y - cy, X - cx)
     for i in range(n_wedges):
@@ -347,9 +404,9 @@ def fourier_2d_features(img, n_rings=8, n_wedges=8):
 # 6. FEATURE AGGREGATION
 # ==============================================================================
 
-def extra_features(img):
-    """Tập hợp các đặc trưng mở rộng (color, texture, shape, dsp)."""
-    return np.hstack((
+def extra_features(img, include_stage_morph=True):
+    """Tập hợp các đặc trưng mở rộng (color, texture, shape, dsp, stage_morph)."""
+    parts = [
         spatial_color_hist(img),
         color_moments(img),
         lbp_hist(img),
@@ -358,13 +415,16 @@ def extra_features(img):
         glcm_features(img),
         gabor_features(img),
         fourier_2d_features(img),
-    )).astype(np.float32)
+    ]
+    if include_stage_morph:
+        parts.append(extract_evolution_stage_features(img))
+    return np.hstack(parts).astype(np.float32)
 
 
 def extract_features(img):
     """Trích xuất toàn bộ vector đặc trưng DSP cho ảnh đầu vào."""
     hog_feat, fine_hog, hist, fd_feat = extract_feature_components(img)
-    features = np.hstack([hog_feat, fine_hog, hist, fd_feat, extra_features(img)])
+    features = np.hstack([hog_feat, fine_hog, hist, fd_feat, extra_features(img, include_stage_morph=True)])
     if features.shape[0] != FEATURE_DIM:
         raise RuntimeError(f"Unexpected feature dimension: {features.shape[0]} (expected {FEATURE_DIM})")
     return features.astype(np.float32)

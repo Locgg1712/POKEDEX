@@ -18,21 +18,21 @@ from src.features import (
     FEATURE_DIM,
 )
 from src.explain import analyze_features, generate_explanation
-from src.mlp import build_mlp, build_legacy_mlp
+from src.mlp import build_mlp, build_legacy_mlp, taxonomy_rerank
 from src.evolution import evolution_rerank, get_family_info
 
-# Cached global model resources
 _models = None
 _labels = None
 _scaler = None
 _centroids = None
 _model_type = None
 _meta = None
+_svm_blend = None
 
 
 def _load_model():
-    """Tải model và metadata từ thư mục Model/ (hỗ trợ cả SVM, DeepMLP và Legacy MLP)."""
-    global _models, _labels, _scaler, _centroids, _model_type, _meta
+    """Tải model và metadata từ thư mục Model/ (hỗ trợ cả Self-Taxonomy DeepMLP, Cosine Head, SVM Blending, Legacy MLP và SVM)."""
+    global _models, _labels, _scaler, _centroids, _model_type, _meta, _svm_blend
     if _models is not None:
         return
 
@@ -49,6 +49,12 @@ def _load_model():
     _scaler = joblib.load(scaler_path)
 
     svm_path = os.path.join(model_dir, "model.pkl")
+    svm_blend_path = os.path.join(model_dir, "svm_blend.pkl")
+    if os.path.exists(svm_blend_path):
+        _svm_blend = joblib.load(svm_blend_path)
+    else:
+        _svm_blend = None
+
     mlp_paths = sorted(
         os.path.join(model_dir, name)
         for name in os.listdir(model_dir)
@@ -67,19 +73,23 @@ def _load_model():
 
         mlp_paths = mlp_paths or [mlp_path]
         _models = []
-        in_dim = _meta["in_dim"]
-        num_classes = _meta["num_classes"]
+        in_dim = int(_meta["in_dim"])
+        num_classes = int(_meta["num_classes"])
+        n_clusters = int(_meta.get("n_clusters", 0))
 
         for path in mlp_paths:
             state_dict = torch.load(path, map_location="cpu", weights_only=True)
-            # Kiểm tra kiến trúc: xem state_dict có thuộc DeepMLP hay Legacy
+            use_cosine_head = bool(_meta.get("use_cosine_head", False)) or any("_log_tau" in k for k in state_dict.keys())
             try:
-                model = build_mlp(in_dim, num_classes, deep=True)
+                model = build_mlp(in_dim, num_classes, deep=True, n_clusters=n_clusters, use_cosine_head=use_cosine_head)
                 model.load_state_dict(state_dict)
             except Exception:
-                # Fallback sang legacy 1-layer MLP
-                model = build_legacy_mlp(in_dim, num_classes)
-                model.load_state_dict(state_dict)
+                try:
+                    model = build_mlp(in_dim, num_classes, deep=True, n_clusters=0, use_cosine_head=use_cosine_head)
+                    model.load_state_dict(state_dict)
+                except Exception:
+                    model = build_legacy_mlp(in_dim, num_classes)
+                    model.load_state_dict(state_dict)
 
             model.eval()
             _models.append(model)
@@ -89,9 +99,7 @@ def _load_model():
         _models = [joblib.load(svm_path)]
         _model_type = "svm"
     else:
-        raise FileNotFoundError(
-            "Không tìm thấy Model/model.pkl, Model/mlp.pt hoặc Model/mlp_*.pt."
-        )
+        raise FileNotFoundError("Không tìm thấy Model/model.pkl, Model/mlp.pt hoặc Model/mlp_*.pt.")
 
     try:
         _centroids = joblib.load(os.path.join(model_dir, "centroids.pkl"))
@@ -100,49 +108,40 @@ def _load_model():
 
 
 def _align_features(img):
-    """
-    Trích xuất vector đặc trưng và căn chỉnh kích thước
-    để tương thích chính xác với số chiều model yêu cầu.
-    """
+    """Trích xuất vector đặc trưng và căn chỉnh kích thước tương thích với mọi phiên bản checkpoint."""
     components = extract_feature_components(img)
     hog_feat, fine_hog, hist, fd_feat = components
 
     expected_dim = int(_meta.get("in_dim", FEATURE_DIM)) if _meta else FEATURE_DIM
+    full = np.hstack([hog_feat, fine_hog, hist, fd_feat, extra_features(img, include_stage_morph=True)])
 
-    # Nếu checkpoint đã lưu danh sách cột cụ thể (cols)
     if _meta and _meta.get("cols") is not None:
-        full = np.hstack([hog_feat, fine_hog, hist, fd_feat, extra_features(img)])
         cols = np.asarray(_meta["cols"], dtype=np.int64)
         if max(cols) < full.shape[0]:
-            return full[cols], components
+            return full[cols].astype(np.float32), components
 
-    # Fallback theo số chiều mô hình cũ
-    if expected_dim == 2820:
-        legacy = np.hstack([hog_feat, hist, fd_feat])
-        return legacy.astype(np.float32), components
+    if expected_dim == 3590:
+        feat_3590 = np.hstack([hog_feat, fine_hog, hist, fd_feat, extra_features(img, include_stage_morph=False)])
+        return feat_3590.astype(np.float32), components
+    elif expected_dim == 2820:
+        return np.hstack([hog_feat, hist, fd_feat]).astype(np.float32), components
     elif expected_dim == 3157:
-        # Checkpoint hiện tại trong Model/: 3157 features (không có geometry, hu, glcm, gabor, fourier2d)
-        legacy = np.hstack([
+        return np.hstack([
             hog_feat, hist, fd_feat,
             spatial_color_hist(img),
             color_moments(img),
             lbp_hist(img),
-        ])
-        return legacy.astype(np.float32), components
+        ]).astype(np.float32), components
     elif expected_dim == 3498:
-        # Checkpoint gồm 9 nhóm cơ bản cũ
-        feat = np.hstack([
+        return np.hstack([
             hog_feat, fine_hog, hist, fd_feat,
             spatial_color_hist(img),
             color_moments(img),
             lbp_hist(img),
             shape_geometry(img),
             hu_moments(img),
-        ])
-        return feat.astype(np.float32), components
+        ]).astype(np.float32), components
 
-    # Model mới với đầy đủ đặc trưng DSP
-    full = extract_features(img)
     return full.astype(np.float32), components
 
 
@@ -157,45 +156,64 @@ def predict(image_path, apply_evolution_rerank=True):
     if img is None:
         return "Không đọc được ảnh", 0.0, "Không thể đọc hoặc trích xuất Pokémon từ ảnh.", []
 
-    # Trích xuất đặc trưng cho ảnh gốc và ảnh lật ngang (Test-Time Augmentation)
+    # Trích xuất đặc trưng cho ảnh gốc và ảnh lật ngang (Flip TTA)
     feat, components = _align_features(img)
     flipped_img = np.ascontiguousarray(np.fliplr(img))
     flipped_feat, _ = _align_features(flipped_img)
 
-    # Chuẩn hóa StandardScaler
     feat_scaled = _scaler.transform([feat])
     flipped_scaled = _scaler.transform([flipped_feat])
 
-    # Áp dụng trọng số nhóm (nếu có trong meta)
     if _meta and _meta.get("w") is not None:
-        weight = np.asarray(_meta["w"])
+        weight = np.asarray(_meta["w"], dtype=np.float32)
         feat_scaled = feat_scaled * weight
         flipped_scaled = flipped_scaled * weight
 
-    # Tính phân phối xác suất
     if _model_type == "svm":
         prob = (
             _models[0].predict_proba(feat_scaled)[0]
             + _models[0].predict_proba(flipped_scaled)[0]
         ) / 2.0
     else:
+        n_clusters = int(_meta.get("n_clusters", 0)) if _meta else 0
+        class_to_cluster = _meta.get("class_to_cluster") if _meta else None
+
         with torch.no_grad():
             tensor = torch.from_numpy(feat_scaled).float()
             flipped_tensor = torch.from_numpy(flipped_scaled).float()
-            probabilities = [
-                (
-                    torch.softmax(model(tensor), dim=1).numpy()[0]
-                    + torch.softmax(model(flipped_tensor), dim=1).numpy()[0]
-                ) / 2.0
-                for model in _models
-            ]
-        prob = np.mean(probabilities, axis=0)
 
-    # Tái xếp hạng nhận thức tiến hóa (Evolution-Aware Reranking)
-    if apply_evolution_rerank:
-        prob = evolution_rerank(prob, _labels, alpha=0.35, uncertainty_threshold=0.60)
+            if n_clusters > 0 and class_to_cluster is not None:
+                sp_list, cl_list = [], []
+                for model in _models:
+                    sp1, cl1 = model(tensor, return_cluster=True)
+                    sp2, cl2 = model(flipped_tensor, return_cluster=True)
+                    sp_list.append(0.5 * (torch.softmax(sp1, dim=1).numpy()[0] + torch.softmax(sp2, dim=1).numpy()[0]))
+                    cl_list.append(0.5 * (torch.softmax(cl1, dim=1).numpy()[0] + torch.softmax(cl2, dim=1).numpy()[0]))
+                prob = np.mean(sp_list, axis=0)
+                cl_prob = np.mean(cl_list, axis=0)
+                prob = taxonomy_rerank(prob, cl_prob, np.asarray(class_to_cluster), beta=0.25)
+            else:
+                probabilities = [
+                    0.5 * (
+                        torch.softmax(model(tensor), dim=1).numpy()[0]
+                        + torch.softmax(model(flipped_tensor), dim=1).numpy()[0]
+                    )
+                    for model in _models
+                ]
+                prob = np.mean(probabilities, axis=0)
 
-    # Top-K Candidates
+        # Hỗ trợ SVM Blending (nếu checkpoint có lưu svm_blend.pkl)
+        if _svm_blend is not None:
+            svm_prob = (
+                _svm_blend.predict_proba(feat_scaled)[0]
+                + _svm_blend.predict_proba(flipped_scaled)[0]
+            ) / 2.0
+            alpha_svm = float(_meta.get("alpha_svm", 0.15)) if _meta else 0.15
+            prob = (1.0 - alpha_svm) * prob + alpha_svm * svm_prob
+
+        if apply_evolution_rerank:
+            prob = evolution_rerank(prob, _labels, alpha=0.35, uncertainty_threshold=0.60)
+
     top_indices = np.argsort(prob)[::-1]
     top3 = [(str(_labels[idx]), float(prob[idx])) for idx in top_indices[:3]]
 
@@ -203,7 +221,6 @@ def predict(image_path, apply_evolution_rerank=True):
     predicted_name = str(_labels[pred_idx])
     confidence = float(prob[pred_idx])
 
-    # Giải thích kết quả bằng centroid khoảng cách cosine
     fam_info = get_family_info(predicted_name)
     family_suffix = ""
     if fam_info:
@@ -216,7 +233,7 @@ def predict(image_path, apply_evolution_rerank=True):
         types_str = ", ".join(fam_info["types"]) if fam_info else "Chưa rõ"
         explanation = (
             f"LÝ DO NHẬN DIỆN ({predicted_name}):\n\n"
-            f"• Phân bố đặc trưng biên (HOG) và màu sắc (HSV) khớp mạnh nhất với nguyên mẫu.\n"
+            f"• Phân bố đặc trưng biên (HOG), tần số (Fourier/Gabor) và màu sắc (HSV) khớp mạnh nhất với nguyên mẫu.\n"
             f"• Hệ nguyên tố: {types_str}.{family_suffix}"
         )
 
